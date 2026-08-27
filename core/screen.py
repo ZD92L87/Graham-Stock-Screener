@@ -13,8 +13,8 @@ def filter(df):
     ]
 
 def apply_filter(file_path, market):
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path, encoding='utf-8')
     filtered_df = filter(df)
-    filtered_df.to_csv(f"results/filtered_{market}.csv", index=False)
+    filtered_df.to_csv(f"results/filtered_{market}.csv", index=False, encoding='utf-8')
     print(f"Filtered stocks saved to 'results/filtered_{market}.csv'")
     return filtered_df 

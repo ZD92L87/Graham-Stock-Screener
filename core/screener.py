@@ -13,7 +13,7 @@ def run_screener_with_logs(selected_market: str, filters: Dict[str, Any], log_me
             log_message(log_messages, log_placeholder, f"Loading tickers for {selected_market} ({market_code})...")
 
             ticker_file = f'data/raw/{market_code}.csv'
-            ticker_df = pd.read_csv(ticker_file)
+            ticker_df = pd.read_csv(ticker_file, encoding='utf-8')
             ticker_count = len(ticker_df)
             log_ticker_loading_complete(log_messages, log_placeholder, ticker_count, selected_market)
             

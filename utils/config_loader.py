@@ -4,7 +4,7 @@ from typing import Dict, Any
 def load_markets() -> Dict[str, str]:
     """Load markets from JSON file with proper display names and codes"""
     try:
-        with open('data/configs/markets_config.json', 'r') as f:
+        with open('data/configs/markets_config.json', 'r', encoding='utf-8') as f:
             config = json.load(f)
             return config['markets']
     except FileNotFoundError:
@@ -26,7 +26,7 @@ def get_market_code(display_name: str) -> str:
 def load_graham_criteria() -> Dict[str, Any]:
     """Load Graham criteria from JSON file"""
     try:
-        with open('data/configs/graham_criteria.json', 'r') as f:
+        with open('data/configs/graham_criteria.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
         # Default Graham criteria if file doesn't exist

@@ -53,7 +53,7 @@ def process_ticker(ticker, log_callback=None):
         return None
 
 def process_data(file_path, market, log_callback=None):
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path, encoding='utf-8')
 
     if 'Ticker' not in df.columns:
         raise ValueError("CSV must contain a 'Ticker' column.")
@@ -70,7 +70,7 @@ def process_data(file_path, market, log_callback=None):
                 processed_tickers += 1
 
     result_df = pd.DataFrame(results)
-    result_df.to_csv(f'data/processed/{market}_tickers.csv', index=False)
+    result_df.to_csv(f'data/processed/{market}_tickers.csv', index=False, encoding='utf-8')
     success_rate = (processed_tickers / total_tickers) * 100
     print(f"Successfully processed {processed_tickers}/{total_tickers} tickers ({success_rate:.2f}% for {market})")
     return result_df 

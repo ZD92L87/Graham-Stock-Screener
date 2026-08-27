@@ -2,23 +2,75 @@ import os
 import json
 import time
 import csv
+import tempfile
+import sys
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.common.exceptions import StaleElementReferenceException
+
+# Force UTF-8 stdout/stderr so emoji-flagged log messages don't crash
+# on consoles that default to GBK (e.g. Chinese Windows).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # This file was used to populate the raw folder
 
+def _env_flag(name: str, default: bool = True) -> bool:
+    """Read a boolean from an env var; anything that isn't a falsey value is True."""
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    return val.strip().lower() not in ("0", "false", "no", "off")
+
+def _build_chrome_options() -> Options:
+    """Build Chrome options, configurable via environment variables.
+
+    Defaults are chosen so the scraper works out of the box (headless, keeps
+    Chrome off the desktop, uses an isolated profile). Override with:
+      SCRAPER_HEADLESS=0        -> show the browser while scraping
+      SCRAPER_NO_SANDBOX=0      -> disable the --no-sandbox flag
+      SCRAPER_DISABLE_DEV_SHM=0 -> disable --disable-dev-shm-usage
+      SCRAPER_DISABLE_GPU=0     -> disable --disable-gpu
+      SCRAPER_WINDOW_SIZE=1600,1200
+      SCRAPER_USER_DATA_DIR=/path/to/profile
+    """
+    options = Options()
+    if _env_flag("SCRAPER_HEADLESS", True):
+        options.add_argument("--headless=new")
+    if _env_flag("SCRAPER_NO_SANDBOX", True):
+        options.add_argument("--no-sandbox")
+    if _env_flag("SCRAPER_DISABLE_DEV_SHM", True):
+        options.add_argument("--disable-dev-shm-usage")
+    if _env_flag("SCRAPER_DISABLE_GPU", True):
+        options.add_argument("--disable-gpu")
+    window_size = os.environ.get("SCRAPER_WINDOW_SIZE", "1920,1080")
+    options.add_argument(f"--window-size={window_size}")
+    user_data_dir = os.environ.get(
+        "SCRAPER_USER_DATA_DIR",
+        os.path.join(tempfile.gettempdir(), "graham_screener_chrome"),
+    )
+    options.add_argument(f"--user-data-dir={user_data_dir}")
+    # Reduce automated-browser detection so the page table renders normally.
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+    return options
+
 def fetch_tickers_and_companies(market, url, suffix, log_callback=None):
-    
     def log(message, level="INFO"):
         print(message)
         if log_callback and "⚠️" not in message:
             log_callback(message)
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    # Use Selenium Manager's automatic driver management instead of
+    # webdriver-manager, which downloaded a mismatched ChromeDriver.
+    driver = webdriver.Chrome(options=_build_chrome_options())
     driver.get(url)
     all_data = []
     ticker_idx = None
@@ -88,16 +140,26 @@ def fetch_tickers_and_companies(market, url, suffix, log_callback=None):
             )
             handle_popups()  
 
-            rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
-            for row in rows:
-                cols = row.find_elements(By.TAG_NAME, "td")
-                if len(cols) > max(ticker_idx, company_idx):
-                    ticker = cols[ticker_idx].text.strip()
-                    company = cols[company_idx].text.strip()
-                    if ticker:
-                        all_data.append([ticker + suffix, company])
+            # Scroll to bottom and give lazy-rendered rows a moment to settle.
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(0.4)
+            # Some pages re-render the table with JS, which invalidates row
+            # references mid-read. Retry the whole page read if that happens.
+            for attempt in range(3):
+                try:
+                    rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+                    for row in rows:
+                        cols = row.find_elements(By.TAG_NAME, "td")
+                        if len(cols) > max(ticker_idx, company_idx):
+                            ticker = cols[ticker_idx].text.strip()
+                            company = cols[company_idx].text.strip()
+                            if ticker:
+                                all_data.append([ticker + suffix, company])
+                    break
+                except StaleElementReferenceException:
+                    log("  ↻ Table re-rendered, retrying page read...")
+                    time.sleep(1)
 
-            
             try:
                 next_button = driver.find_element(By.XPATH, "//button[contains(., 'Next') or contains(., '›')] | //a[contains(., 'Next') or contains(., '›')]")
                 if not next_button.is_enabled() or 'disabled' in next_button.get_attribute("class").lower():
