@@ -20,7 +20,9 @@ real time and filters the market for value opportunities.
   Shenzhen, Hong Kong, and 90+ more).
 - **Financial metrics** – fetched on demand via
   [yfinance](https://github.com/ranaroussi/yfinance) (P/E, P/B, dividend yield,
-  debt/equity, current ratio, EPS, market cap).
+  debt/equity, current ratio, EPS, market cap). When yfinance is unreachable or
+  rate-limited, the app **automatically falls back** to China-friendly sources
+  (Tencent, Eastmoney, Sina) so screening keeps working.
 - **Ticker refresher** – Selenium + Chrome automate the per-market list updates.
 
 Pre-populated ticker lists are stored in `data/raw/<MARKET>.csv`.
@@ -61,6 +63,15 @@ box on modern / Chinese Windows environments:
    reading rows.
 5. **Clean packaging** – added a `.gitignore` and one-command `run.bat` /
    `run.sh` helpers, and tidied `requirements.txt`.
+6. **Multi-source data fallback** – if yfinance fails (e.g. Yahoo returns HTTP
+   429 from some IPs), the screener falls back to Tencent, Eastmoney and Sina
+   instead of returning no data.
+7. **Bulk A-share snapshot** – A-shares are loaded via one Sina market snapshot
+   and only the cheap candidates are enriched with fundamentals, so screening
+   thousands of A-shares is fast.
+8. **Batched US/HK quotes** – US and Hong Kong stocks are fetched in batched
+   Tencent calls (price, P/E, market cap). Fields that a source does not carry
+   are skipped rather than dropping the stock.
 
 ---
 
@@ -226,6 +237,18 @@ The ticker scraper reads these environment variables (all optional):
 | `SCRAPER_DISABLE_GPU`   | `1` (true)   | Set `0` to keep GPU acceleration.    |
 | `SCRAPER_WINDOW_SIZE`   | `1920,1080`  | Browser window size.                 |
 | `SCRAPER_USER_DATA_DIR` | temp dir     | Isolated Chrome profile directory.   |
+
+### Data coverage per market
+
+- **A-shares (SHA/SZ)** – price, P/E, P/B, market cap, EPS, debt/equity,
+  current ratio.
+- **US (NYSE/NASDAQ/US OTC) & Hong Kong (HKG)** – price, P/E, market cap. P/B,
+  EPS and other credit metrics are not available from the free domestic
+  sources and are skipped by the filter when missing.
+- **Note:** under the strict default Graham criteria (debt/equity < 0.5 and
+  current ratio > 1.5), most cheap A-shares are heavily leveraged banks and are
+  correctly excluded. Loosen the debt/equity slider (e.g. to 2.0) to see
+  candidates.
 
 ---
 
